@@ -3,170 +3,160 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
-import re
-import nltk
 import string
-from nltk.text import Text
-
+import re
 plt.style.use('seaborn-v0_8-pastel')
-# warnings.filterwarnings("ignore")
+
+import nltk
+from nltk.stem import WordNetLemmatizer
+from wordcloud import WordCloud
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score, confusion_matrix, ConfusionMatrixDisplay
 
 #Data Ingestion
-
 df = pd.read_csv("TwitterHateSpeech.csv", usecols = ['label', 'tweet'])
 data_stats={'Observations':df.shape[0],'Features':df.shape[1],'File_size':df.size,
             'Columns':df.columns,'Data_types':df.dtypes,'Null_vals':df.isnull().sum()}
-# print(data_stats)
-# print('info:',df.info()) 
 
 #Data understanding
-# Predictor Attribute
-text = df.iloc[:, 1:] #strips of label, just id and tweet
-# print(text.tail())
-
+#Predictor Attributes
+text = df.iloc[:, 1:]
 #Target Attributes
-label = df.iloc[:, 0:1] #just id and label
-# label.tail()
+label = df.iloc[:, 0:1]
 
-#get number of hate vs normal speech
-hateSpeech=df[df['label']==1].shape[0] #w/o .shape[0] is just all hate speech, shape0 gets cols, 1 gets rows
-normSpeech=df[df['label']==0].shape[0]
+#Data Cleaning
+def data_processing(text):
+    text = text.lower()
+    text = re.sub(r"https\S+|www\S+http\S+", '', text, flags = re.MULTILINE)
+    text = re.sub(r'ð','',text)
+    text = re.sub(r'â','',text)
+    text = re.sub(r'user','',text)
+    text = re.sub(r'amp','',text)
+    text=re.sub(r'(@[A-Za-z0-9]+)',"",text)
+    text=text.translate(str.maketrans('','',string.punctuation)) 
+    text=" ".join(e for e in text.split() if e.isalnum())
 
-typesSpeech=[hateSpeech,normSpeech]
-labels=['Hate Speech','Non-hate speech']
-plt.pie(typesSpeech,explode=[0,.1],labels=labels,autopct='%1.1f%%',startangle=-50)
-plt.show()
-
-#Data cleaning
-#text cleaning
-
-def clean(text):
-    """Makes all input text lowercase, cleans of @users, 
-    removes punctuation and special characters"""
-    newtext=''
-    newtext=text.lower()
-    newtext=re.sub(r'(@[A-Za-z0-9]+)',"",text)
-    newtext=text.translate(str.maketrans('','',string.punctuation))
-    newtext=" ".join(e for e in text.split() if e.isalnum())
-    return newtext
+    return text
+df['tweet'] = df['tweet'].apply(data_processing)
 
 
-df['tweet']=df['tweet'].apply(clean)
-
-
-#pre processing
-
-#tokenizing
-from nltk.tokenize import sent_tokenize, word_tokenize
+#Pre-Processing
+#Tokenizing
+from nltk.tokenize import word_tokenize
 import nltk
-# nltk.download('punkt')
-def tokenize(text): #tweet to list of words
+def tokenize(text):
     text=word_tokenize(text)
     return text
-# print(df['tweet'])
 df['tweet']=df['tweet'].apply(tokenize)
-# print('post tokenize')
-# print(df['tweet'])
 
-
-#removing StopWords (words that are useless to task)
+#Remove StopWords
 from nltk.corpus import stopwords
-stop=stopwords.words('english')
-#rename function to be better
-def StopWords(text): #
-    """"removes stop words from text"""
-    return ' '.join([word for word in text if word not in (stop)])
-
-
+stop=set(stopwords.words('english'))
+def StopWords(tokens):
+    filtered_tokens = [token for token in tokens if token.lower() not in stop]
+    return " ".join(filtered_tokens)
 df['tweet']=df['tweet'].apply(StopWords)
 
 #Lemmatization
-from nltk.stem import WordNetLemmatizer
-lemmatizer=WordNetLemmatizer()
+lemmatizer = WordNetLemmatizer()
+def lemmatized(data): 
+    tweet = [lemmatizer.lemmatize(word) for word in data]
+    return data
+df['tweet'] = df['tweet'].apply(lambda x: lemmatized(x))
 
-def lemmatize(text): #breaks stuff, fix
-    return [lemmatizer.lemmatize(token) for token in text]
-
-# df['tweet']=df['tweet'].apply(lemmatize)
-
-  
+#Pie Chart
+fig = plt.figure(figsize=(7,7))
+hateSpeech=df[df['label']==1].shape[0]
+normSpeech=df[df['label']==0].shape[0]
+typesSpeech=[hateSpeech,normSpeech]
+labels=['Hate Speech','Non-hate speech']
+plt.pie(typesSpeech,explode=[0,.1],labels=labels,autopct='%1.0f%%',startangle=-50)
+plt.show()
 
 #WordCloud
-from wordcloud import WordCloud
-from wordcloud import STOPWORDS
-hate_speech = df[df['label'] == 1]   
-comment_words = ''
-stopwords = set(STOPWORDS)
-for val in hate_speech.tweet:
-    #typecaste each val to string
-    val = str(val)
-    #split the value
-    tokens = val.split()
-    #Converts each token into lowercase
-    for i in range(len(tokens)):
-        tokens[i] = tokens[i].lower()
-     
-    comment_words += " ".join(tokens)+" "
- 
-wordcloud = WordCloud(width = 800, height = 800,
-                background_color ='black',
-                stopwords = stopwords,
-                min_font_size = 12).generate(comment_words)
- 
-# plot the WordCloud hate speech image                      
-# plt.figure(figsize = (8, 8), facecolor = None)
-# plt.imshow(wordcloud)
-# plt.axis("off")
-# plt.tight_layout(pad = 0)
-# plt.show()
-
-
-normSpeech = df[df['label'] == 0]   
-comment_words = ''
-stopwords = set(STOPWORDS)
-for val in normSpeech.tweet:
-    #typecaste each val to string
-    val = str(val)
-    #split the value
-    tokens = val.split()
-    #Converts each token into lowercase
-    for i in range(len(tokens)):
-        tokens[i] = tokens[i].lower()
-    comment_words += " ".join(tokens)+" "
-wordcloud = WordCloud(width = 800, height = 800,
-                background_color ='black',
-                stopwords = stopwords,
-                min_font_size = 11).generate(comment_words)
- 
-# plot the WordCloud norm speech image                      
-# plt.figure(figsize = (8, 8), facecolor = None)
-# plt.imshow(wordcloud)
-# plt.axis("off")
-# plt.title('Norm Speech WordCloud')
-# plt.tight_layout(pad = 0)
-# plt.show()
+fig,axs=plt.subplots(1,2,figsize=(16,8))
+normSpeech = df[df.label == 0]
+text = ' '.join([word for word in normSpeech['tweet']])
+train_cloud_pos = WordCloud(max_words=500, collocations = False, background_color = 'white').generate(text)
+hate_speech = df[df.label == 1]
+text = ' '.join([word for word in hate_speech['tweet']])
+train_cloud_neg= WordCloud(max_words=500, collocations = False, background_color = 'black').generate(text)
+axs[0].imshow(train_cloud_pos, interpolation='bilinear')
+axs[0].axis('off')
+axs[0].set_title('Non-Hate Comments')
+axs[1].imshow(train_cloud_neg, interpolation='bilinear')
+axs[1].axis('off')
+axs[1].set_title('Hate Comments')
+plt.show()
 
 #Feature Extraction
 from sklearn.feature_extraction.text import TfidfVectorizer
-vectorizer=TfidfVectorizer(max_features=5000)
-# list_to_str = [] # remove the list inside tweet cols which was create due to lemm??
-#breaks stuff
-# for lists in df['tweet']:
-#     list_to_str.append(' '.join(map(str, lists)))
-# df['tweet'] = list_to_str
+vect = TfidfVectorizer(max_features=5000,ngram_range=(1,2)).fit(df['tweet'])
 
-corpus=df['tweet']
-tfidf_matrix=vectorizer.fit_transform(corpus)
-text=tfidf_matrix.toarray()
-# print(text.shape)
+x= df['tweet']
+y= df['label']
+x= vect.transform(x) 
 
-#Split dataset
-from sklearn.model_selection import train_test_split
-labels=df.iloc[:,0]
-x_train, x_test, y_train, y_test=train_test_split(text,labels,test_size=.3,random_state=0)
+x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=42)
 
-print('Training data:',x_train.shape)
-print('Testing data:',x_test.shape)
+logreg = LogisticRegression()
+logreg.fit(x_train, y_train)
+logreg_predict = logreg.predict(x_test)
+y_pred_test = logreg.predict(x_test)
+logreg_acc = accuracy_score(logreg_predict, y_test)
+print("Test accuracy: {:.2f}%".format(logreg_acc*100))
 
-#Build model
+#Confusion Matrix:
+confusion_matrix = confusion_matrix(y_test, y_pred_test)
+TP = confusion_matrix[1, 1]        
+TN = confusion_matrix[0, 0]           
+FP = confusion_matrix[0, 1]           
+FN = confusion_matrix[1, 0]
+group_names = ['TN','FP','FN','TP']
+group_counts = ["{0:0.0f}".format(value) for value in confusion_matrix.flatten()]
+group_percentages = ["{0:.2%}".format(value) for value in confusion_matrix.flatten()/np.sum(confusion_matrix)]
+labels = [f"{v1}\n{v2}\n{v3}" for v1, v2, v3 in zip(group_names,group_counts,group_percentages)]
+labels = np.asarray(labels).reshape(2,2)
+sns.heatmap(confusion_matrix, annot=labels, fmt='', cmap='Greens')
+plt.figure(figsize = (12, 5))
 
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, mean_absolute_error, roc_auc_score
+#Accuracy Score
+Accuracy = accuracy_score(y_test, y_pred_test)
+print('Accuracy Score:', Accuracy) 
+
+# Precision Score
+Precision = precision_score(y_test, y_pred_test)
+print('Precision Score:', Precision)   
+
+# True positive Rate (TPR)/Sensitivity/Recall
+TPR = recall_score(y_test, y_pred_test)
+print('True positive Rate:', TPR)             
+
+# False positive Rate (FPR)
+FPR = FP/float(TN+FP)
+print('False positive Rate', FPR)                       
+
+#F1 Score or F-Measure or F-Score
+F1 = f1_score(y_test, y_pred_test)
+print('F1 Score:', F1)                 
+
+#Specificity
+Specificity = TN/(TN+FP)
+print('Specificity:', Specificity )                    
+
+#Mean Absolute Error
+Error = mean_absolute_error(y_test, y_pred_test)
+print('Mean Absolute Error:', Error)   
+
+#ROC Area
+Roc = roc_auc_score(y_test, y_pred_test)
+print('ROC Area:', Roc) 
+
+result = [Accuracy, Precision, TPR, FPR, F1, Specificity, Error, Roc]
+label = ["Accuracy", "Precision", "TPR", "FPR", "F-Score", "Specificity", "Error", "Roc Area"]
+colors=[ 'red', 'green', 'blue', 'darkgoldenrod', 'orange', 'purple', 'brown', 'darkcyan']
+plt.bar(label, result, color = colors, edgecolor='black')
+plt.show()
