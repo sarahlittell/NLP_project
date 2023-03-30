@@ -6,7 +6,8 @@ import matplotlib.pyplot as plt
 import string
 import re
 plt.style.use('seaborn-v0_8-pastel')
-
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
 import nltk
 from nltk.stem import WordNetLemmatizer
 from wordcloud import WordCloud
@@ -14,6 +15,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, confusion_matrix, ConfusionMatrixDisplay
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, mean_absolute_error, roc_auc_score
 
 #Data Ingestion
 df = pd.read_csv("TwitterHateSpeech.csv", usecols = ['label', 'tweet'])
@@ -37,22 +39,17 @@ def data_processing(text):
     text=re.sub(r'(@[A-Za-z0-9]+)',"",text)
     text=text.translate(str.maketrans('','',string.punctuation)) 
     text=" ".join(e for e in text.split() if e.isalnum())
-
     return text
 df['tweet'] = df['tweet'].apply(data_processing)
 
-
 #Pre-Processing
 #Tokenizing
-from nltk.tokenize import word_tokenize
-import nltk
 def tokenize(text):
     text=word_tokenize(text)
     return text
 df['tweet']=df['tweet'].apply(tokenize)
 
 #Remove StopWords
-from nltk.corpus import stopwords
 stop=set(stopwords.words('english'))
 def StopWords(tokens):
     filtered_tokens = [token for token in tokens if token.lower() not in stop]
@@ -61,8 +58,8 @@ df['tweet']=df['tweet'].apply(StopWords)
 
 #Lemmatization
 lemmatizer = WordNetLemmatizer()
-def lemmatized(data): 
-    tweet = [lemmatizer.lemmatize(word) for word in data]
+def lemmatized(data):
+    tweets = [lemmatizer.lemmatize(word) for word in data]
     return data
 df['tweet'] = df['tweet'].apply(lambda x: lemmatized(x))
 
@@ -92,13 +89,10 @@ axs[1].set_title('Hate Comments')
 plt.show()
 
 #Feature Extraction
-from sklearn.feature_extraction.text import TfidfVectorizer
 vect = TfidfVectorizer(max_features=5000,ngram_range=(1,2)).fit(df['tweet'])
-
 x= df['tweet']
 y= df['label']
 x= vect.transform(x) 
-
 x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=42)
 
 logreg = LogisticRegression()
@@ -122,7 +116,6 @@ labels = np.asarray(labels).reshape(2,2)
 sns.heatmap(confusion_matrix, annot=labels, fmt='', cmap='Greens')
 plt.figure(figsize = (12, 5))
 
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, mean_absolute_error, roc_auc_score
 #Accuracy Score
 Accuracy = accuracy_score(y_test, y_pred_test)
 print('Accuracy Score:', Accuracy) 
